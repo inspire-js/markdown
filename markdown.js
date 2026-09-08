@@ -1,0 +1,123 @@
+import { $$, getConfig } from "./util.js";
+import markdownit from "markdown-it";
+import Inspire from "@inspirejs/core";
+
+let { selectors, pluginNames } = getConfig();
+let elements = $$(selectors.join(", "));
+
+let md = new markdownit("commonmark", {
+	html: true,
+	typographer: true,
+	linkify: true,
+	// breaks: true
+})
+	.enable(["table"])
+	.disable("code");
+
+// Load and apply plugins specified via data-markdown-plugins (comma-separated npm package names or URLs)
+for (let name of pluginNames) {
+	let url = name;
+
+	if (!name.includes("/")) {
+		try {
+			// Prefer an already installed copy (resolved via import map or node_modules)
+			url = import.meta.resolve(name);
+		}
+		catch {
+			url = `https://esm.sh/${name}`;
+		}
+	}
+
+	let module = await import(url);
+	md.use(module.default || module);
+}
+
+if (pluginNames.has("markdown-it-attrs")) {
+	// Fix fenced code blocks
+	// Apply fenced attributes to <pre>, language class to <code>
+	md.renderer.rules.fence = function (tokens, idx, options, env, slf) {
+		const token = tokens[idx];
+		const info = token.info ? md.utils.unescapeAll(token.info).trim() : "";
+		const langName = info ? info.split(/(\s+)/g)[0] : "";
+		const content = md.utils.escapeHtml(token.content);
+		const codeClass = langName ? ` class="${options.langPrefix + langName}"` : "";
+
+		return `<pre${slf.renderAttrs(token)}>\n<code${codeClass}>${content}</code>\n</pre>\n`;
+	};
+}
+
+for (let e of elements) {
+	let changed = render(e);
+
+	if (changed) {
+		Inspire.domchanged(e);
+	}
+}
+
+function getCommonPrefix (strings) {
+	return strings.reduce((prefix, str) => {
+		let i = [...str].findIndex((c, i) => c !== prefix[i]);
+		return i > -1 ? prefix.slice(0, i) : prefix;
+	});
+}
+
+function getIndent (code) {
+	// Grab indent used on any non-empty line
+	let indents = code.match(/^[\t ]*(?=\S)/gm);
+	return indents ? getCommonPrefix(indents) : "";
+}
+
+function renderCode (code) {
+	// Remove overall indentation
+	let indent = getIndent(code);
+	if (indent) {
+		code = code.replace(new RegExp("^" + indent, "gm"), "");
+	}
+
+	// Text chunks with headings should be rendered as block markdown regardless
+	return /\r?\n|^\#/.test(code.trim()) ? md.render(code) : md.renderInline(code);
+}
+
+function render (e) {
+	// Skip elements whose content should not be markdown-processed
+	if (e?.classList.contains("no-md") || /^(PRE|CODE|SCRIPT|STYLE|SVG)$/.test(e?.tagName)) {
+		return;
+	}
+
+	let previousHTML = e.innerHTML;
+
+	if (e.children.length === 0) {
+		let code = e.textContent;
+		let html = renderCode(code);
+
+		e.innerHTML = html;
+	}
+	else {
+		// Join adjacent text nodes
+		e.normalize();
+
+		for (let child of [...e.childNodes]) {
+			if (child.nodeType === Node.TEXT_NODE) {
+				let code = child.textContent;
+				let html = renderCode(code);
+
+				if (child.nextSibling) {
+					child.nextSibling.insertAdjacentHTML("beforebegin", html);
+				}
+				else if (child.previousSibling) {
+					child.previousSibling.insertAdjacentHTML("afterend", html);
+				}
+				else {
+					continue;
+				}
+
+				child.remove();
+			}
+			else if (child.nodeType === Node.ELEMENT_NODE) {
+				render(child);
+			}
+		}
+	}
+
+	return e.innerHTML !== previousHTML;
+}
