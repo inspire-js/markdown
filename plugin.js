@@ -33,7 +33,18 @@ let pluginNames = new Set(
 );
 
 for (let name of pluginNames) {
-	let url = name.includes("/") ? name : `https://esm.sh/${name}`;
+	let url = name;
+
+	if (!name.includes("/")) {
+		try {
+			// Prefer an already installed copy (resolved via import map or node_modules)
+			url = import.meta.resolve(name);
+		}
+		catch {
+			url = `https://esm.sh/${name}`;
+		}
+	}
+
 	let module = await import(url);
 	md.use(module.default || module);
 }
