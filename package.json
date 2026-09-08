@@ -14,7 +14,7 @@
 	"license": "MIT",
 	"author": "Lea Verou",
 	"type": "module",
-	"main": "src/index.js",
+	"main": "plugin.js",
 	"scripts": {
 		"release": "npm whoami >/dev/null 2>&1 || npm login && release-it",
 		"test": "npx htest test"
@@ -29,5 +29,8 @@
 	},
 	"dependencies": {
 		"markdown-it": "^15.0.1"
+	},
+	"peerDependencies": {
+		"@inspirejs/core": ">=2.0.0"
 	}
 }
