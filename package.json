@@ -32,5 +32,8 @@
 	},
 	"peerDependencies": {
 		"@inspirejs/core": ">=2.0.0"
+	},
+	"publishConfig": {
+		"access": "public"
 	}
 }
